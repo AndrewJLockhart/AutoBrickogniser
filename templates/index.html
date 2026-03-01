@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AutoBrickogniser</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>AutoBrickogniser</h1>
+      <p class="subtitle">Capture a LEGO piece, identify it, and check NINJAGO + pricing insights.</p>
+
+      <section class="camera-panel">
+        <div class="capture-grid">
+          <div class="capture-column">
+            <h2>Live Camera Feed</h2>
+            <div class="media-frame media-with-action">
+              <video id="video" autoplay playsinline></video>
+              <button id="analyzeBtn" class="analyze-icon-btn" type="button" disabled aria-label="Analyze current frame" title="Analyze current frame">
+                Analyse
+              </button>
+            </div>
+          </div>
+
+          <div class="capture-column">
+            <h2>BrickLink Reference Image</h2>
+            <div class="media-frame">
+              <img id="referenceImage" class="reference-image" alt="Detected BrickLink piece" hidden />
+              <div id="referencePlaceholder" class="reference-placeholder">
+                <span>No detected piece yet.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <canvas id="canvas" hidden></canvas>
+      </section>
+
+      <section class="result-panel">
+        <h2>Result</h2>
+        <div id="status">Start camera to begin.</div>
+        <div id="result"></div>
+      </section>
+
+      <section class="result-panel">
+        <h2>Debug Diagnostics</h2>
+        <p class="subtitle">Raw response returned from Brickognize for the latest analysis request.</p>
+        <pre id="debugPanel" class="debug-panel">No analysis run yet.</pre>
+      </section>
+    </main>
+
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>
