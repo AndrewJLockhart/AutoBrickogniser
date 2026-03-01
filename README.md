@@ -31,6 +31,26 @@ AutoBrickogniser captures a frame from your webcam, sends it to the Brickognize 
 4. Open http://127.0.0.1:5000
 5. Click **Start Camera**, then **Analyze Current Frame**.
 
+### One-command start (Windows)
+
+You can start the app with one command from the project root:
+
+```powershell
+.\start.ps1
+```
+
+Or run:
+
+```cmd
+start.cmd
+```
+
+The launcher will:
+
+- create `.venv` if it does not exist,
+- install dependencies from `requirements.txt`,
+- start `app.py`.
+
 ## How it works
 
 1. Frontend captures the current video frame into a JPEG blob.
