@@ -12,9 +12,16 @@ const liveFrameEl = document.getElementById('liveFrame');
 const referenceFrameEl = document.getElementById('referenceFrame');
 const referenceOpenBtn = document.getElementById('referenceOpenBtn');
 const BRICKLINK_TAB_NAME = 'bricklinkTab';
+const debugWrapperEl = document.getElementById('debugWrapper');
+const debugToggleBtn = document.getElementById('debugToggleBtn');
+const liveFrameEl = document.getElementById('liveFrame');
+const referenceFrameEl = document.getElementById('referenceFrame');
+const referenceOpenBtn = document.getElementById('referenceOpenBtn');
+const BRICKLINK_TAB_NAME = 'bricklinkTab';
 
 let mediaStream = null;
 let referenceImageClickUrl = null;
+let debugCollapsed = false;
 let debugCollapsed = false;
 
 function setStatus(text, isError = false) {
@@ -38,11 +45,18 @@ function resetReferenceImage(message = 'No detected piece yet.') {
   referencePlaceholderEl.hidden = false;
   referencePlaceholderEl.textContent = message;
   if (referenceOpenBtn) referenceOpenBtn.hidden = true;
+  if (referenceOpenBtn) referenceOpenBtn.hidden = true;
 }
 
 function renderReferenceImage(prediction) {
   const imageUrl = prediction?.bricklink_image_url || prediction?.image_url || null;
   const bricklinkUrl = prediction?.bricklink_url || null;
+  const bricklinkType = prediction?.bricklink_type || null;
+
+  if (bricklinkType === 'other') {
+    resetReferenceImage('Not MiniFigure or MiniFigure Part');
+    return;
+  }
   const bricklinkType = prediction?.bricklink_type || null;
 
   if (bricklinkType === 'other') {
@@ -63,9 +77,11 @@ function renderReferenceImage(prediction) {
     referenceImageClickUrl = bricklinkUrl;
     referenceImageEl.classList.remove('not-clickable');
     if (referenceOpenBtn) referenceOpenBtn.hidden = false;
+    if (referenceOpenBtn) referenceOpenBtn.hidden = false;
   } else {
     referenceImageClickUrl = null;
     referenceImageEl.classList.add('not-clickable');
+    if (referenceOpenBtn) referenceOpenBtn.hidden = true;
     if (referenceOpenBtn) referenceOpenBtn.hidden = true;
   }
 }
@@ -250,6 +266,7 @@ function buildPredictionHtml(data) {
       return `
         <tr>
           <td><a href="${fig.url}" target="${BRICKLINK_TAB_NAME}">${fig.id}</a></td>
+          <td><a href="${fig.url}" target="${BRICKLINK_TAB_NAME}">${fig.id}</a></td>
           <td>${fig.name} ${badge}</td>
           <td>${newPrice}</td>
           <td>${usedPrice}</td>
@@ -266,8 +283,41 @@ function buildPredictionHtml(data) {
   const pLast6 = partDetails.last6 || {new:{}, used:{}};
   const pCurrent = partDetails.current || {new:{}, used:{}};
 
+  // Compact part view: show compact prices and the list of minifigures below
+  const partDetails = prediction.part_price_details || {};
+  const pLast6 = partDetails.last6 || {new:{}, used:{}};
+  const pCurrent = partDetails.current || {new:{}, used:{}};
+
   return `
     <article class="card">
+      <div class="inline-metadata">
+        <div class="meta-id"><strong>ID:</strong> ${prediction.bricklink_url ? `<a href="${prediction.bricklink_url}" target="${BRICKLINK_TAB_NAME}">${prediction.id || 'N/A'}</a>` : (prediction.id || 'N/A')}</div>
+        <div class="meta-confidence"><strong>Confidence:</strong> ${prediction.score ? (prediction.score * 100).toFixed(1) + '%' : 'N/A'}</div>
+        <div class="meta-ninjago"><strong>NINJAGO:</strong> ${ninjago.is_in_any_ninjago_minifigure ? 'Yes' : 'No'}</div>
+      </div>
+      <p class="meta-name"><strong>Name:</strong> ${prediction.name || 'N/A'}</p>
+
+      <table class="compact-prices">
+        <thead>
+          <tr>
+            <th>Period</th>
+            <th>New Avg</th>
+            <th>Used Avg</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Last 6 Months</td>
+            <td>${pLast6.new.avg ?? 'N/A'}</td>
+            <td>${pLast6.used.avg ?? 'N/A'}</td>
+          </tr>
+          <tr>
+            <td>Current Items</td>
+            <td>${pCurrent.new.avg ?? partNew}</td>
+            <td>${pCurrent.used.avg ?? partUsed}</td>
+          </tr>
+        </tbody>
+      </table>
       <div class="inline-metadata">
         <div class="meta-id"><strong>ID:</strong> ${prediction.bricklink_url ? `<a href="${prediction.bricklink_url}" target="${BRICKLINK_TAB_NAME}">${prediction.id || 'N/A'}</a>` : (prediction.id || 'N/A')}</div>
         <div class="meta-confidence"><strong>Confidence:</strong> ${prediction.score ? (prediction.score * 100).toFixed(1) + '%' : 'N/A'}</div>
@@ -360,6 +410,18 @@ async function analyzeCurrentFrame() {
       return;
     }
 
+    const text = await response.text();
+    let payload = null;
+    try {
+      payload = JSON.parse(text);
+    } catch (err) {
+      // Not JSON — show raw text in debug and surface an error
+      setDebugPanel(text);
+      setStatus('Analysis request failed: non-JSON response', true);
+      resetReferenceImage('Reference image unavailable due to request error.');
+      return;
+    }
+
     renderBrickognizeDebug(payload);
 
     if (!response.ok) {
@@ -417,6 +479,49 @@ referenceImageEl.addEventListener('click', () => {
   if (!referenceImageClickUrl) {
     return;
   }
+  window.open(referenceImageClickUrl, BRICKLINK_TAB_NAME);
+});
+
+function openReferenceUrl() {
+  if (!referenceImageClickUrl) return;
+  window.open(referenceImageClickUrl, BRICKLINK_TAB_NAME);
+}
+
+// clicking the whole live frame triggers analyze
+if (liveFrameEl) {
+  liveFrameEl.addEventListener('click', (ev) => {
+    // If the click was on the overlay button itself, let the button handler run
+    if (ev.target === analyzeBtn) return;
+    analyzeCurrentFrame();
+  });
+}
+
+// clicking the whole reference frame opens BrickLink when available
+if (referenceFrameEl) {
+  referenceFrameEl.addEventListener('click', (ev) => {
+    if (ev.target === referenceOpenBtn) return;
+    openReferenceUrl();
+  });
+}
+
+if (referenceOpenBtn) {
+  referenceOpenBtn.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    openReferenceUrl();
+  });
+}
+
+function setDebugCollapse(collapsed) {
+  debugCollapsed = collapsed;
+  debugWrapperEl.classList.toggle('collapsed', collapsed);
+  debugToggleBtn.textContent = collapsed ? 'Show details' : 'Hide details';
+  debugToggleBtn.setAttribute('aria-expanded', String(!collapsed));
+}
+
+debugToggleBtn.addEventListener('click', () => {
+  setDebugCollapse(!debugCollapsed);
+});
+setDebugCollapse(true);
   window.open(referenceImageClickUrl, BRICKLINK_TAB_NAME);
 });
 
