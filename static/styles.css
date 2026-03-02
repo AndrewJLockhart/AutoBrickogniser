@@ -29,9 +29,38 @@ h3 {
 .result-panel {
   background: #fff;
   border-radius: 8px;
-  padding: 1rem;
+  padding: 0.75rem;
   margin-bottom: 1rem;
   border: 1px solid #e0e0e0;
+}
+
+.panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.panel-heading .status {
+  margin-left: auto;
+  font-weight: 600;
+}
+
+.toggle-btn {
+  border: 1px solid #ccc;
+  background: #f5f5f5;
+  color: #333;
+  border-radius: 6px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.9rem;
+}
+
+.toggle-btn:hover {
+  border-color: #999;
+}
+
+.debug-wrapper.collapsed {
+  display: none;
 }
 
 .capture-grid {
@@ -52,6 +81,7 @@ h3 {
   border: 1px solid #e0e0e0;
   overflow: hidden;
   background: #111;
+  position: relative;
 }
 
 .media-with-action {
@@ -95,6 +125,18 @@ video {
   display: none !important;
 }
 
+.inline-metadata {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.meta-name {
+  margin-top: 0.4rem;
+  margin-bottom: 0.2rem;
+}
+
 .button-row {
   margin-top: 1rem;
   display: flex;
@@ -117,6 +159,7 @@ video {
   font-weight: 600;
   line-height: 1;
   cursor: pointer;
+  z-index: 10;
 }
 
 button {
@@ -143,6 +186,15 @@ table {
   width: 100%;
   border-collapse: collapse;
   margin-top: 0.5rem;
+}
+
+.compact-prices th,
+.compact-prices td {
+  padding: 0.35rem;
+}
+
+.compact-prices {
+  max-width: 360px;
 }
 
 th,

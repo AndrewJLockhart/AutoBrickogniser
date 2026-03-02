@@ -6,9 +6,16 @@ const resultEl = document.getElementById('result');
 const debugPanelEl = document.getElementById('debugPanel');
 const referenceImageEl = document.getElementById('referenceImage');
 const referencePlaceholderEl = document.getElementById('referencePlaceholder');
+const debugWrapperEl = document.getElementById('debugWrapper');
+const debugToggleBtn = document.getElementById('debugToggleBtn');
+const liveFrameEl = document.getElementById('liveFrame');
+const referenceFrameEl = document.getElementById('referenceFrame');
+const referenceOpenBtn = document.getElementById('referenceOpenBtn');
+const BRICKLINK_TAB_NAME = 'bricklinkTab';
 
 let mediaStream = null;
 let referenceImageClickUrl = null;
+let debugCollapsed = false;
 
 function setStatus(text, isError = false) {
   statusEl.textContent = text;
@@ -30,11 +37,18 @@ function resetReferenceImage(message = 'No detected piece yet.') {
   referenceImageEl.classList.add('not-clickable');
   referencePlaceholderEl.hidden = false;
   referencePlaceholderEl.textContent = message;
+  if (referenceOpenBtn) referenceOpenBtn.hidden = true;
 }
 
 function renderReferenceImage(prediction) {
   const imageUrl = prediction?.bricklink_image_url || prediction?.image_url || null;
   const bricklinkUrl = prediction?.bricklink_url || null;
+  const bricklinkType = prediction?.bricklink_type || null;
+
+  if (bricklinkType === 'other') {
+    resetReferenceImage('Not MiniFigure or MiniFigure Part');
+    return;
+  }
 
   if (!imageUrl) {
     resetReferenceImage('No reference image available for this match.');
@@ -48,9 +62,11 @@ function renderReferenceImage(prediction) {
   if (bricklinkUrl) {
     referenceImageClickUrl = bricklinkUrl;
     referenceImageEl.classList.remove('not-clickable');
+    if (referenceOpenBtn) referenceOpenBtn.hidden = false;
   } else {
     referenceImageClickUrl = null;
     referenceImageEl.classList.add('not-clickable');
+    if (referenceOpenBtn) referenceOpenBtn.hidden = true;
   }
 }
 
@@ -163,6 +179,46 @@ function buildPredictionHtml(data) {
   const ninjago = data.ninjago;
   const minifigs = data.minifigures || [];
 
+  // If Brickognize / BrickLink identified a minifigure, render the minifigure price table
+  if (prediction?.is_minifigure) {
+    const details = prediction.minifigure_price_details || {};
+    const last6 = details.last6 || { new: {}, used: {} };
+    const current = details.current || { new: {}, used: {} };
+    // Compact table: rows are Last 6 Months and Current; columns New / Used
+    return `
+      <article class="card">
+        <div class="inline-metadata">
+          <div class="meta-id"><strong>ID:</strong> ${prediction.bricklink_url ? `<a href="${prediction.bricklink_url}" target="${BRICKLINK_TAB_NAME}">${prediction.id || 'N/A'}</a>` : (prediction.id || 'N/A')}</div>
+          <div class="meta-confidence"><strong>Confidence:</strong> ${prediction.score ? (prediction.score * 100).toFixed(1) + '%' : 'N/A'}</div>
+          <div class="meta-ninjago"><strong>NINJAGO:</strong> ${prediction.minifigure_is_ninjago ? 'Yes' : 'No'}</div>
+        </div>
+        <p class="meta-name"><strong>Name:</strong> ${prediction.name || 'N/A'}</p>
+
+        <table class="compact-prices">
+          <thead>
+            <tr>
+              <th>Period</th>
+              <th>New Avg</th>
+              <th>Used Avg</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Last 6 Months</td>
+              <td>${last6.new.avg ?? 'N/A'}</td>
+              <td>${last6.used.avg ?? 'N/A'}</td>
+            </tr>
+            <tr>
+              <td>Current Items</td>
+              <td>${current.new.avg ?? 'N/A'}</td>
+              <td>${current.used.avg ?? 'N/A'}</td>
+            </tr>
+          </tbody>
+        </table>
+      </article>
+    `;
+  }
+
   const minifigRows = minifigs
     .map((fig) => {
       const badge = fig.is_ninjago ? '<span class="badge">NINJAGO</span>' : '';
@@ -171,7 +227,7 @@ function buildPredictionHtml(data) {
 
       return `
         <tr>
-          <td><a href="${fig.url}" target="_blank" rel="noopener noreferrer">${fig.id}</a></td>
+          <td><a href="${fig.url}" target="${BRICKLINK_TAB_NAME}">${fig.id}</a></td>
           <td>${fig.name} ${badge}</td>
           <td>${newPrice}</td>
           <td>${usedPrice}</td>
@@ -183,15 +239,41 @@ function buildPredictionHtml(data) {
   const partNew = prediction.avg_new_price || 'N/A';
   const partUsed = prediction.avg_used_price || 'N/A';
 
+  // Compact part view: show compact prices and the list of minifigures below
+  const partDetails = prediction.part_price_details || {};
+  const pLast6 = partDetails.last6 || {new:{}, used:{}};
+  const pCurrent = partDetails.current || {new:{}, used:{}};
+
   return `
     <article class="card">
-      <h3>Detected Piece</h3>
-      <p><strong>ID:</strong> ${prediction.id || 'N/A'}</p>
-      <p><strong>Name:</strong> ${prediction.name || 'N/A'}</p>
-      <p><strong>Confidence:</strong> ${prediction.score ? (prediction.score * 100).toFixed(1) + '%' : 'N/A'}</p>
-      <p><strong>Part of any NINJAGO minifigure:</strong> ${ninjago.is_in_any_ninjago_minifigure ? 'Yes' : 'No'}</p>
-      <p><strong>Detected Piece Avg Price:</strong> New ${partNew} / Used ${partUsed}</p>
-      ${prediction.bricklink_url ? `<p><a href="${prediction.bricklink_url}" target="_blank" rel="noopener noreferrer">Open on BrickLink</a></p>` : ''}
+      <div class="inline-metadata">
+        <div class="meta-id"><strong>ID:</strong> ${prediction.bricklink_url ? `<a href="${prediction.bricklink_url}" target="${BRICKLINK_TAB_NAME}">${prediction.id || 'N/A'}</a>` : (prediction.id || 'N/A')}</div>
+        <div class="meta-confidence"><strong>Confidence:</strong> ${prediction.score ? (prediction.score * 100).toFixed(1) + '%' : 'N/A'}</div>
+        <div class="meta-ninjago"><strong>NINJAGO:</strong> ${ninjago.is_in_any_ninjago_minifigure ? 'Yes' : 'No'}</div>
+      </div>
+      <p class="meta-name"><strong>Name:</strong> ${prediction.name || 'N/A'}</p>
+
+      <table class="compact-prices">
+        <thead>
+          <tr>
+            <th>Period</th>
+            <th>New Avg</th>
+            <th>Used Avg</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Last 6 Months</td>
+            <td>${pLast6.new.avg ?? 'N/A'}</td>
+            <td>${pLast6.used.avg ?? 'N/A'}</td>
+          </tr>
+          <tr>
+            <td>Current Items</td>
+            <td>${pCurrent.new.avg ?? partNew}</td>
+            <td>${pCurrent.used.avg ?? partUsed}</td>
+          </tr>
+        </tbody>
+      </table>
     </article>
 
     <article class="card">
@@ -244,7 +326,18 @@ async function analyzeCurrentFrame() {
       body: formData,
     });
 
-    const payload = await response.json();
+    const text = await response.text();
+    let payload = null;
+    try {
+      payload = JSON.parse(text);
+    } catch (err) {
+      // Not JSON — show raw text in debug and surface an error
+      setDebugPanel(text);
+      setStatus('Analysis request failed: non-JSON response', true);
+      resetReferenceImage('Reference image unavailable due to request error.');
+      return;
+    }
+
     renderBrickognizeDebug(payload);
 
     if (!response.ok) {
@@ -302,7 +395,48 @@ referenceImageEl.addEventListener('click', () => {
   if (!referenceImageClickUrl) {
     return;
   }
-  window.open(referenceImageClickUrl, '_blank', 'noopener,noreferrer');
+  window.open(referenceImageClickUrl, BRICKLINK_TAB_NAME);
 });
+
+function openReferenceUrl() {
+  if (!referenceImageClickUrl) return;
+  window.open(referenceImageClickUrl, BRICKLINK_TAB_NAME);
+}
+
+// clicking the whole live frame triggers analyze
+if (liveFrameEl) {
+  liveFrameEl.addEventListener('click', (ev) => {
+    // If the click was on the overlay button itself, let the button handler run
+    if (ev.target === analyzeBtn) return;
+    analyzeCurrentFrame();
+  });
+}
+
+// clicking the whole reference frame opens BrickLink when available
+if (referenceFrameEl) {
+  referenceFrameEl.addEventListener('click', (ev) => {
+    if (ev.target === referenceOpenBtn) return;
+    openReferenceUrl();
+  });
+}
+
+if (referenceOpenBtn) {
+  referenceOpenBtn.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    openReferenceUrl();
+  });
+}
+
+function setDebugCollapse(collapsed) {
+  debugCollapsed = collapsed;
+  debugWrapperEl.classList.toggle('collapsed', collapsed);
+  debugToggleBtn.textContent = collapsed ? 'Show details' : 'Hide details';
+  debugToggleBtn.setAttribute('aria-expanded', String(!collapsed));
+}
+
+debugToggleBtn.addEventListener('click', () => {
+  setDebugCollapse(!debugCollapsed);
+});
+setDebugCollapse(true);
 analyzeBtn.addEventListener('click', analyzeCurrentFrame);
 window.addEventListener('load', startCamera);
