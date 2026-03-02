@@ -425,6 +425,76 @@ def scrape_minifigs_using_part(part_number: str) -> list[dict[str, str]]:
     return figs
 
 
+def scrape_minifig_inventory(minifig_id: str) -> list[dict[str, str]]:
+    """Scrape a minifigure page and return a list of parts with item no and image url.
+
+    This uses a best-effort approach: find anchors to part pages and nearby image tags.
+    """
+    if not minifig_id:
+        return []
+
+    # Try multiple endpoints/variants to surface the inventory section. Some BrickLink pages
+    # expose the inventory under a separate tab or different URL parameters; try them in order.
+    try_urls = [
+        f"https://www.bricklink.com/v2/catalog/catalogitem.page?M={minifig_id}",
+        f"https://www.bricklink.com/v2/catalog/catalogitem.page?M={minifig_id}&T=I",
+        f"https://www.bricklink.com/v2/catalog/catalogitem.page?M={minifig_id}&tab=I",
+        f"https://www.bricklink.com/v2/catalog/catalogitem_pgtab.page?M={minifig_id}&tab=I",
+    ]
+
+    parts: list[dict[str, str]] = []
+    seen: set[str] = set()
+
+    soup = None
+    for u in try_urls:
+        try:
+            response = session.get(u, timeout=REQUEST_TIMEOUT_SECONDS)
+            response.raise_for_status()
+        except requests.RequestException:
+            continue
+
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        # Broadly search for anchors that include a ?P= or &P= pattern, not just catalogitem.page
+        anchors = [a for a in soup.find_all('a', href=True) if re.search(r"[?&]P=", a.get('href', ''))]
+        if anchors:
+            # we found candidate anchors on this variant, stop trying further URLs
+            break
+
+    if not soup:
+        return []
+
+    # Process all discovered anchors and deduplicate by part number
+    for a in anchors:
+        href = a.get('href', '')
+        full_href = href if href.startswith('http') else f"https://www.bricklink.com/{href.lstrip('/')}"
+        parsed = urlparse(full_href)
+        query = parse_qs(parsed.query)
+        p = query.get('P', [None])[0]
+        if not p or p in seen:
+            continue
+        seen.add(p)
+
+        # Try to get a nearby image: prefer img inside the anchor, otherwise look for img sibling or parent
+        img = a.find('img') or a.select_one('img')
+        image_url = None
+        if img and img.get('src'):
+            src = img.get('src')
+            image_url = src if src.startswith('http') else f"https://www.bricklink.com/{src.lstrip('/')}"
+        else:
+            parent_img = a.find_parent()
+            if parent_img:
+                found = parent_img.select_one('img')
+                if found and found.get('src'):
+                    src = found.get('src')
+                    image_url = src if src.startswith('http') else f"https://www.bricklink.com/{src.lstrip('/')}"
+
+        part_name = a.get_text(strip=True) or None
+        parts.append({"part_number": p, "name": part_name, "url": full_href, "image_url": image_url})
+
+    return parts
+
+
 def looks_like_ninjago(text: str) -> bool:
     return "ninjago" in text.lower().replace(" ", "")
 
@@ -516,7 +586,9 @@ def analyze_piece():
             except requests.RequestException:
                 pass
 
-            is_ninjago = looks_like_ninjago(fig["name"])
+            # Determine Ninjago by name or by ID prefix (e.g., njo####)
+            fid = (fig.get("id") or "").lower()
+            is_ninjago = looks_like_ninjago(fig.get("name", "")) or fid.startswith(("njo", "ngo"))
 
             enriched_minifigs.append(
                 {
@@ -552,6 +624,7 @@ def analyze_piece():
         minifigure_price_details = None
         is_minifigure = False
         minifig_is_ninjago = False
+        minifigure_inventory = None
 
         if bricklink_type == "minifigure" or prediction.get("type") == "fig":
             is_minifigure = True
@@ -560,6 +633,13 @@ def analyze_piece():
                 minifigure_price_details = scrape_minifig_price_details(mf_id)
             except requests.RequestException:
                 minifigure_price_details = None
+
+            # Fetch inventory parts for this minifigure (item numbers + images)
+            minifigure_inventory = None
+            try:
+                minifigure_inventory = scrape_minifig_inventory(mf_id)
+            except requests.RequestException:
+                minifigure_inventory = None
 
             # determine ninjago by id if available
             if mf_id:
@@ -587,6 +667,7 @@ def analyze_piece():
                 "is_minifigure": is_minifigure,
                 "minifigure_price_details": minifigure_price_details,
                 "minifigure_is_ninjago": minifig_is_ninjago,
+                "minifigure_inventory": minifigure_inventory,
             },
             "brickognize_attempts": attempts,
             "brickognize": {

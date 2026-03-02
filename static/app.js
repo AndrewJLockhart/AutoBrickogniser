@@ -185,6 +185,20 @@ function buildPredictionHtml(data) {
     const last6 = details.last6 || { new: {}, used: {} };
     const current = details.current || { new: {}, used: {} };
     // Compact table: rows are Last 6 Months and Current; columns New / Used
+    const inventory = prediction.minifigure_inventory || [];
+    const inventoryRows = inventory
+      .map((p) => {
+        const img = p.image_url ? `<img src="${p.image_url}" alt="${p.part_number || ''}" style="width:48px;height:auto;"/>` : '';
+        return `
+          <tr>
+            <td>${p.part_number ? `<a href="${p.url}" target="${BRICKLINK_TAB_NAME}">${p.part_number}</a>` : 'N/A'}</td>
+            <td>${img}</td>
+            <td>${p.name || ''}</td>
+          </tr>
+        `;
+      })
+      .join('');
+
     return `
       <article class="card">
         <div class="inline-metadata">
@@ -215,6 +229,14 @@ function buildPredictionHtml(data) {
             </tr>
           </tbody>
         </table>
+
+        <h4>Inventory (${inventory.length})</h4>
+        ${inventory.length ? `
+          <table class="inventory-table">
+            <thead><tr><th>Item No</th><th>Image</th><th>Name</th></tr></thead>
+            <tbody>${inventoryRows}</tbody>
+          </table>
+        ` : '<p>No inventory found.</p>'}
       </article>
     `;
   }
@@ -373,7 +395,7 @@ async function analyzeCurrentFrame() {
 
     resultEl.innerHTML = buildPredictionHtml(payload);
     renderReferenceImage(payload.prediction);
-    setStatus('Analysis complete.');
+    setStatus('');
   } catch (error) {
     setDebugPanel(
       JSON.stringify(
